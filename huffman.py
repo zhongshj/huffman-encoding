@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 #%%
-def split_prob(list_prob):
+def gen_coding(list_prob):
     
     print(list_prob)
     #list_prob = list([0.2,0.4,0.3,0.1])
