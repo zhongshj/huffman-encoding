@@ -156,14 +156,21 @@ def quantization(wave_data):
     
 #%% read
 f = wave.open(r"/Users/shijianzhong/Documents/github/huffman encoding/female/SX368.wav", "rb")
-str_data = f.readframes(f.getnframes())
 params = f.getparams()
 nchannels, sampwidth, framerate, nframes = params[:4]
-
 str_data = f.readframes(nframes)
 f.close()
-
 wave_data = np.fromstring(str_data, dtype=np.short)
 
-quantizer = gen_quant_array()
+#%% process
+
+target_data = wave_data
+
+#%% write
+f = wave.open(r"output.wav", "wb")
+f.setnchannels(nchannels)
+f.setsampwidth(sampwidth)
+f.setframerate(framerate)
+f.writeframes(target_data.tostring())
+f.close()
         
