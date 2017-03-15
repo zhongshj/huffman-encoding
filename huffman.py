@@ -10,6 +10,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import wave
+import math
+import collections
+
 
 #%%
 
@@ -115,7 +118,7 @@ def gen_quant_array():
     for i in range(8):
         step = 0.5**(8-i)*max_volume
         for j in range(8):
-            quant_vector.append(sum_step+step*0.125*(j+1))
+            quant_vector.append(sum_step+step*(1/8)*(j+1))
         sum_step = quant_vector[-1]
     
     double_quant = quant_vector.copy()
@@ -163,14 +166,19 @@ f.close()
 wave_data = np.fromstring(str_data, dtype=np.short)
 
 #%% process
-
-target_data = wave_data
-
+target_data, error = quantization(wave_data)
+list_prob = get_prob_list(target_data)
+list_code = gen_coding(list_prob)
+entropy = entropy(list_prob)
+print("entropy:",entropy)
+average_length = average_length(list_prob,list_code)
+print("average length:",average_length)
 #%% write
 f = wave.open(r"output.wav", "wb")
 f.setnchannels(nchannels)
 f.setsampwidth(sampwidth)
 f.setframerate(framerate)
-f.writeframes(target_data.tostring())
+save_data = target_data.astype(np.short)
+f.writeframes(save_data.tostring())
 f.close()
         
