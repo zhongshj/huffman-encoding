@@ -108,24 +108,52 @@ def gen_coding(list_prob):
     print("code:",list_code)
     return list_code
 
-
-
-def gen_quant_array():
-    #generate quantization array
-    quant_vector = list([0])
-    max_volume = 32768
-    sum_step = 0
-    for i in range(8):
-        step = 0.5**(8-i)*max_volume
-        for j in range(8):
-            quant_vector.append(sum_step+step*(1/8)*(j+1))
-        sum_step = quant_vector[-1]
+def a_law_comp(array):
+    a = 87.6
+    e = 2.71828182845
+    max_amp = 32768
+    array = array/max_amp
+    a_array = np.zeros(np.size(array))
+    for i in range(np.size(array)):
+        if array[i] >= 0 and array[i] <= 1/a:
+            a_array[i] = a*array[i]/(1+math.log(a,e))
+        elif array[i] > 1/a:
+            a_array[i] = (1+math.log(a*array[i],e))/(1+math.log(a,e))
+        elif array[i] < 0 and array[i] >= -1/a:
+            a_array[i] = -1*a*array[i]/(1+math.log(a,e))
+        elif array[i] < -1/a:
+            a_array[i] = -1*(1+math.log(-1*a*array[i],e))/(1+math.log(a,e))
+        else:
+            a_array[i] = 0
+    return a_array
     
-    double_quant = quant_vector.copy()
-    double_quant.reverse()
-    double_quant =  list(np.array(double_quant) * (-1))
-    double_quant.extend(quant_vector[1:])
-    return double_quant
+def a_law_decomp(array):
+    a = 87.6
+    e = 2.71828182845
+    b = 1+math.log(a,e)
+    array = array/max(abs(array))
+    a_array = np.zeros(np.size(array))
+    for i in range(np.size(array)):
+        if array[i] >= 0 and array[i] <= 1/b:
+            a_array[i] = array[i]*b/a
+        elif array[i] > 1/b:
+            a_array[i] = (e**(array[i]*b-1))/a
+        elif array[i] < 0 and array[i] >= -1/b:
+            a_array[i] = array[i]*b/a
+        elif array[i] < -1/b:
+            a_array[i] = -1*(e**(-1*array[i]*b-1))/a
+        else:
+            a_array[i] = 0
+    return a_array
+    
+    
+def gen_quant_array(bit):
+    #generate quantization array
+    num = 2**bit
+    interval = 2/num
+    quant_array = np.arange(-1,1,interval)
+    quant_array = quant_array + interval/2
+    return quant_array
 
 
 def half_search(quantizer,vol):
@@ -142,9 +170,9 @@ def half_search(quantizer,vol):
         return half_search(quantizer[:math.ceil(l/2)],vol)
 
 
-def quantization(wave_data):
+def quantization(wave_data,bit=8):
     #
-    quantizer = gen_quant_array()
+    quantizer = gen_quant_array(bit)
     quantized_data = []
     for i in wave_data:
         quantized_data.append(half_search(quantizer,i))
@@ -152,29 +180,30 @@ def quantization(wave_data):
     quantized_data = np.array(quantized_data)
     quantization_error = l2_norm(quantized_data-wave_data)/np.size(quantized_data)
     print("quantization error:", quantization_error)
-    return quantized_data, quantization_error
+    return quantized_data/max(abs(quantized_data))
 
 
     
     
 #%% read
-f = wave.open(r"/Users/shijianzhong/Documents/github/huffman encoding/female/SX368.wav", "rb")
+f = wave.open(r"/Users/shijianzhong/Documents/github/huffman encoding/male/SA1.wav", "rb")
 params = f.getparams()
 nchannels, sampwidth, framerate, nframes = params[:4]
 str_data = f.readframes(nframes)
 f.close()
-wave_data = np.fromstring(str_data, dtype=np.short)
+sa1m = np.fromstring(str_data, dtype=np.short)
 
 #%% process
-target_data, error = quantization(wave_data)
-list_prob = get_prob_list(target_data)
-list_code = gen_coding(list_prob)
-entropy = entropy(list_prob)
-print("entropy:",entropy)
-average_length = average_length(list_prob,list_code)
-print("average length:",average_length)
+sa1m_q = quantization(a_law_comp(sa1m))
+sa2m_q = quantization(a_law_comp(sa2m))
+sa1f_q = quantization(a_law_comp(sa1f))
+sa2f_q = quantization(a_law_comp(sa2f))
+#%%
+plt.hist(sa2m_q,bins=20)
+plt.title("Quantized amplitude destribution for SA2.wav(male)")
+plt.savefig("2m.eps")
 #%% write
-f = wave.open(r"output.wav", "wb")
+f = wave.open(r"output8.wav", "wb")
 f.setnchannels(nchannels)
 f.setsampwidth(sampwidth)
 f.setframerate(framerate)
