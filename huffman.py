@@ -12,33 +12,36 @@ import pandas as pd
 import wave
 import math
 import collections
-
+import string
 
 #%%
+get_bin = lambda x, n: format(x, 'b').zfill(n)
 
+def get_freq_array(wave_data):
+    #return a sorted frequency array and corresponding index
+    array_prob = np.zeros(65536)
+    for i in wave_data:
+        array_prob[i+32768] = array_prob[i+32768] + 1
+        print("add:",i)
+    index = np.argsort(array_prob)
+    array_prob = array_prob[index]
+    return array_prob[::-1], index[::-1]-32768
+    
+#def get_freq_array(wave_data):
+#    array_prob = np.zeros(65536)
+#    for i in wave_data:
+#        array_prob[i+32768] = array_prob[i+32768] + 1
+#        print("add:",i)
+#    #index = np.argsort(array_prob)
+#    #array_prob = array_prob[index]
+#    return array_prob
+    
+def get_part_prob(array_prob,k):
+    sum_freq = 0
+    for i in range(k):
+        sum_freq = sum_freq + array_prob[i]
+    return sum_freq/sum(array_prob)
 
-def l2_norm(array):
-    #compute sum of squares
-    addup = 0
-    for i in array:
-        addup = addup + i**2
-    return addup
-
-
-def snr(wave_data,quantized_data):
-    #compute quantization snr
-    return 10 * math.log(l2_norm(wave_data)/l2_norm(wave_data-quantized_data),2)
-
-
-def get_prob_list(quantized_data):
-    #calculate list_prob from quantized_data
-    for_prob = np.append(quantized_data,np.array(gen_quant_array()))
-    d = collections.Counter(for_prob)
-    a = np.array(list(d.items()))
-    newarray = sorted(a, key=lambda x:(x[0]))
-    a = np.array(newarray)
-    list_prob = list(a.T[1])
-    return list_prob
 
 
 def average_length(list_prob,list_code):
@@ -59,7 +62,7 @@ def entropy(list_prob):
 
 
 def gen_coding(list_prob):
-    
+    #return huffman codes
     print(list_prob)
     #list_prob = list([0.2,0.4,0.3,0.1])
     
@@ -71,7 +74,7 @@ def gen_coding(list_prob):
     merge_list0 = list([])
     merge_list1 = list([])
     while len(df) > 1:
-        #print("len:",len(df))
+        print("len:",len(df))
         df = df.sort_values(by="prob")
         df = df.reset_index(drop=True)
         merge_list0.append(df['symbol'][0])
@@ -108,81 +111,71 @@ def gen_coding(list_prob):
     print("code:",list_code)
     return list_code
 
-def a_law_comp(array):
-    a = 87.6
-    e = 2.71828182845
-    max_amp = 32768
-    array = array/max_amp
-    a_array = np.zeros(np.size(array))
-    for i in range(np.size(array)):
-        if array[i] >= 0 and array[i] <= 1/a:
-            a_array[i] = a*array[i]/(1+math.log(a,e))
-        elif array[i] > 1/a:
-            a_array[i] = (1+math.log(a*array[i],e))/(1+math.log(a,e))
-        elif array[i] < 0 and array[i] >= -1/a:
-            a_array[i] = -1*a*array[i]/(1+math.log(a,e))
-        elif array[i] < -1/a:
-            a_array[i] = -1*(1+math.log(-1*a*array[i],e))/(1+math.log(a,e))
-        else:
-            a_array[i] = 0
-    return a_array
     
-def a_law_decomp(array):
-    a = 87.6
-    e = 2.71828182845
-    b = 1+math.log(a,e)
-    array = array/max(abs(array))
-    a_array = np.zeros(np.size(array))
-    for i in range(np.size(array)):
-        if array[i] >= 0 and array[i] <= 1/b:
-            a_array[i] = array[i]*b/a
-        elif array[i] > 1/b:
-            a_array[i] = (e**(array[i]*b-1))/a
-        elif array[i] < 0 and array[i] >= -1/b:
-            a_array[i] = array[i]*b/a
-        elif array[i] < -1/b:
-            a_array[i] = -1*(e**(-1*array[i]*b-1))/a
-        else:
-            a_array[i] = 0
-    return a_array
+def gen_dict(list_code_o,index):
+    #generate dictionary that only contains huffman codes
+    list_code = list_code_o.copy()
+    dic = {}
+    for i in range(-32768,32768):
+        try:
+            dic[i] = list_code[np.where(index==i)[0][0]]
+            print("exist:",i)
+        except BaseException as e:
+            
+            #dic[i] = list(map(int,list(np.binary_repr(i, width=16))))
+            print("noexist:",i)
+    return dic
     
-    
-def gen_quant_array(bit):
-    #generate quantization array
-    num = 2**bit
-    interval = 2/num
-    quant_array = np.arange(-1,1,interval)
-    quant_array = quant_array + interval/2
-    return quant_array
-
-
-def half_search(quantizer,vol):
-    #a half search function, return the nearest level for vol
-    l = len(quantizer)
-    if l == 2:
-        if quantizer[0] + quantizer[1] > 2 * vol:
-            return quantizer[0]
-        else:
-            return quantizer[1]
-    elif vol > quantizer[math.floor(l/2)]:
-        return half_search(quantizer[math.floor(l/2):],vol)
-    else:
-        return half_search(quantizer[:math.ceil(l/2)],vol)
-
-
-def quantization(wave_data,bit=8):
-    #
-    quantizer = gen_quant_array(bit)
-    quantized_data = []
+def encoding(dic,wave_data):
+    #if huffman coding, code with 0 + huffman codes
+    #if amplitude coding, code with 1 + (int to binary)
+    bit_stream = []
     for i in wave_data:
-        quantized_data.append(half_search(quantizer,i))
+        try:
+            l = dic[i].copy()
+            l.insert(0,0)
+            bit_stream.extend(l)
+        except BaseException as e:
+            bit_stream.append(1)
+            #bit_stream.extend(list(map(int,list(np.binary_repr(i, width=16)))))
+            bit_stream.extend([int(value) for value in list(get_bin(i+32768, 16))])
+    return bit_stream
     
-    quantized_data = np.array(quantized_data)
-    quantization_error = l2_norm(quantized_data-wave_data)/np.size(quantized_data)
-    print("quantization error:", quantization_error)
-    return quantized_data/max(abs(quantized_data))
-
-
+def decoding(bit_stream_o,list_code,index):
+    wave_list = []
+    bit_stream = bit_stream_o.copy()
+    count = 0
+    while len(bit_stream)!=0:
+        print(len(bit_stream))
+        dis = bit_stream.pop(0)
+        if dis == 0:
+            temp = []
+            find = False
+            count2 = 0
+            while find == False:
+                bit = bit_stream.pop(0)
+                count2 = count2 + 1
+                if count2 > 100:
+                    print(count2)
+                temp.append(bit)
+                #print(bit)
+                for i in range(len(list_code)):
+                    #print("serch list_code",i)
+                    
+                    if temp == list_code[i]:
+                        print("found")
+                        count = count+1
+                        wave_list.append(index[i])
+                        find = True
+                        break
+        else:
+            print("slajdflksd")
+            temp = []
+            for i in range(16):
+                temp.append(bit_stream.pop(0))
+            wave_list.append(int(''.join(str(e) for e in temp),2)-32768)
+            count = count+1
+    return wave_list
     
     
 #%% read
@@ -193,15 +186,28 @@ str_data = f.readframes(nframes)
 f.close()
 sa1m = np.fromstring(str_data, dtype=np.short)
 
-#%% process
-sa1m_q = quantization(a_law_comp(sa1m))
-sa2m_q = quantization(a_law_comp(sa2m))
-sa1f_q = quantization(a_law_comp(sa1f))
-sa2f_q = quantization(a_law_comp(sa2f))
+#%% get probability
+array_prob_f1,index_f1 = get_freq_array(sa1f)
+array_prob_f2,index_f2 = get_freq_array(sa2f)
+array_prob_m1,index_m1 = get_freq_array(sa1m)
+array_prob_m2,index_m2 = get_freq_array(sa2m)
+#%% get codes
+list_code_all = gen_coding(list(array_prob_all[0:4096]))
+
+
+
+#%% get dics for encoding
+dic_f1 = gen_dict(list_code_f1,index_f1)
+dic_f2 = gen_dict(list_code_f2,index_f2)
+dic_m1 = gen_dict(list_code_m1,index_m1)
+dic_m2 = gen_dict(list_code_m2,index_m2)
+
+
 #%%
-plt.hist(sa2m_q,bins=20)
-plt.title("Quantized amplitude destribution for SA2.wav(male)")
-plt.savefig("2m.eps")
+bit_stream = encoding(dic_all,sa1f)
+de = decoding(bit_stream,list_code_all,index_all)
+
+
 #%% write
 f = wave.open(r"output8.wav", "wb")
 f.setnchannels(nchannels)
