@@ -191,9 +191,13 @@ array_prob_f1,index_f1 = get_freq_array(sa1f)
 array_prob_f2,index_f2 = get_freq_array(sa2f)
 array_prob_m1,index_m1 = get_freq_array(sa1m)
 array_prob_m2,index_m2 = get_freq_array(sa2m)
+array_prob_all,index_all = get_freq_array(all_wave)
 #%% get codes
 list_code_all = gen_coding(list(array_prob_all[0:4096]))
-
+list_code_f1 = gen_coding(list(array_prob_f1[0:4096]))
+list_code_f2 = gen_coding(list(array_prob_f2[0:4096]))
+list_code_m1 = gen_coding(list(array_prob_m1[0:4096]))
+list_code_m2 = gen_coding(list(array_prob_m2[0:4096]))
 
 
 #%% get dics for encoding
@@ -201,11 +205,14 @@ dic_f1 = gen_dict(list_code_f1,index_f1)
 dic_f2 = gen_dict(list_code_f2,index_f2)
 dic_m1 = gen_dict(list_code_m1,index_m1)
 dic_m2 = gen_dict(list_code_m2,index_m2)
+dic_all = gen_dict(list_code_all,index_all)
 
+#%% encoding and decoding
+bit_stream = encoding(dic_all,sa1f)
+#de = decoding(bit_stream,list_code_all,index_all)
 
 #%%
-bit_stream = encoding(dic_all,sa1f)
-de = decoding(bit_stream,list_code_all,index_all)
+p_f1 = get_part_prob(array_prob_f1,k):
 
 
 #%% write
